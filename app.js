@@ -236,7 +236,7 @@ window.closeModal = () => {
     document.getElementById('modal-container').style.display = 'none';
 };
 
-function openAssetModal(editId = null) {
+window.openAssetModal = (editId = null) => {
     const asset = editId ? assets.find(a => a.id === editId) : null;
     const isEdit = !!asset;
 
@@ -399,7 +399,40 @@ window.handleAction = (id) => {
                 <button class="btn btn-primary" onclick="confirmSignOut(${id})">Confirm Sign Out</button>
             </div>
         `);
+    } else if (asset.status === 'damaged') {
+        openModal(`
+            <div class="modal-header">
+                <h2>Damaged Asset Details</h2>
+                <p style="color:var(--text-muted)"><strong>${asset.name}</strong> is currently marked as damaged.</p>
+            </div>
+            <div class="form-group">
+                <p>Status: <span class="status-badge status-damaged">Damaged</span></p>
+                <p style="margin-top:0.5rem; font-size:0.9rem;">Last Action: ${asset.last_action}</p>
+            </div>
+            <div style="display:flex; gap:1rem; justify-content:flex-end; margin-top:2rem;">
+                <button class="btn btn-outline" onclick="closeModal()">Close</button>
+                <button class="btn btn-primary" onclick="markFixed(${id})">Mark as Fixed / Available</button>
+            </div>
+        `);
     }
+};
+
+window.markFixed = async (id) => {
+    const asset = assets.find(a => a.id === id);
+    if (!asset) return;
+
+    const today = new Date().toISOString().split('T')[0];
+
+    await supabase.from('assets').update({
+        status: 'available',
+        condition: 'good',
+        last_action: `Fixed/Restored - ${today}`
+    }).eq('id', id);
+
+    // No transaction log needed as per user request ("The system doesnt need to record that")
+    
+    closeModal();
+    await loadData();
 };
 
 window.confirmSignOut = async (id) => {
