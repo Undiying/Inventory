@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sheen Academy | Inventory Management</title>
+    <meta name="description" content="Premium inventory and asset management system for Sheen Academy.">
+    <link rel="stylesheet" href="styles.css">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="sidebar-logo">
+                <i data-lucide="shield-check"></i>
+                <span>Sheen Academy</span>
+            </div>
+            <ul class="nav-links">
+                <li class="nav-item">
+                    <a href="#" class="nav-link active" id="nav-dashboard">
+                        <i data-lucide="layout-dashboard"></i>
+                        <span>Dashboard</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="#" class="nav-link" id="nav-inventory">
+                        <i data-lucide="box"></i>
+                        <span>All Inventory</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="#" class="nav-link" id="nav-robotics">
+                        <i data-lucide="bot"></i>
+                        <span>Robotics Kits</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="#" class="nav-link" id="nav-history">
+                        <i data-lucide="history"></i>
+                        <span>Log History</span>
+                    </a>
+                </li>
+            </ul>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header>
+                <div class="welcome-section">
+                    <h1 id="page-title">Inventory Dashboard</h1>
+                    <p id="page-description">Overview of Sheen Academy assets and availability.</p>
+                </div>
+                <div class="header-actions">
+                    <button class="btn btn-primary" id="add-asset-btn">
+                        <i data-lucide="plus-circle"></i>
+                        Add New Asset
+                    </button>
+                </div>
+            </header>
+
+            <div id="content-area">
+                <!-- Dashboard Overview -->
+                <div class="stats-grid animate-in">
+                    <div class="stat-card">
+                        <span class="stat-label">Total Assets</span>
+                        <span class="stat-value" id="count-total">--</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-label">Available</span>
+                        <span class="stat-value" id="count-available" style="color: var(--success)">--</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-label">Signed Out</span>
+                        <span class="stat-value" id="count-signed-out" style="color: var(--warning)">--</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-label">Broken/Down</span>
+                        <span class="stat-value" id="count-broken" style="color: var(--danger)">--</span>
+                    </div>
+                </div>
+
+                <!-- Main Inventory List -->
+                <div class="inventory-list animate-in" style="animation-delay: 0.1s">
+                    <div class="table-header">
+                        <h2>Recent Assets</h2>
+                        <div class="search-box">
+                            <i data-lucide="search" style="position:absolute; left:1rem; top:50%; transform:translateY(-50%); color:var(--text-muted); width:18px;"></i>
+                            <input type="text" id="inventory-search" placeholder="Search assets..." class="form-control" style="padding-left:3rem; width:300px; background:var(--glass);">
+                        </div>
+                    </div>
+                    <table id="inventory-table">
+                        <thead>
+                            <tr>
+                                <th>Asset Name</th>
+                                <th>Category</th>
+                                <th>Status</th>
+                                <th>Last Action</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="inventory-body">
+                            <!-- Injected by app.js -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modals (Hidden by default) -->
+    <div id="modal-container" style="display:none;"></div>
+
+    <script type="module" src="app.js"></script>
+    <script>
+        // Initialize Lucide icons
+        lucide.createIcons();
+    </script>
+</body>
+</html>
