@@ -4,6 +4,8 @@ import supabase from './supabase-config.js';
 let assets = [];
 let transactions = [];
 let filteredAssets = [];
+let categories = [];
+let openKitIds = new Set(); // Track which kits have their components expanded
 
 // Initialize UI
 document.addEventListener('DOMContentLoaded', async () => {
@@ -43,7 +45,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Add Asset Button
     document.getElementById('add-asset-btn').addEventListener('click', () => {
-        openAddAssetModal();
+        openAssetModal(); // Unified modal for Add/Edit
     });
 
     // Mobile Navigation
@@ -87,6 +89,9 @@ async function loadData() {
     transactions = transData;
     filteredAssets = [...assets];
     
+    // Extract unique categories
+    categories = [...new Set(assets.map(a => a.category))].sort();
+
     updateStats();
     applyFilters();
 }
@@ -100,7 +105,7 @@ function updateStats() {
     const total = assets.length;
     const available = assets.filter(a => a.status === 'available').length;
     const signedOut = assets.filter(a => a.status === 'signed-out').length;
-    const broken = assets.filter(a => a.status === 'broken').length;
+    const damaged = assets.filter(a => a.status === 'damaged').length;
 
     const totalEl = document.getElementById('count-total');
     const availableEl = document.getElementById('count-available');
@@ -110,7 +115,7 @@ function updateStats() {
     if(totalEl) totalEl.textContent = total;
     if(availableEl) availableEl.textContent = available;
     if(signedOutEl) signedOutEl.textContent = signedOut;
-    if(brokenEl) brokenEl.textContent = broken;
+    if(brokenEl) brokenEl.textContent = damaged;
 }
 
 function applyFilters() {
@@ -134,9 +139,9 @@ function renderInventory(items) {
     if (tableHeader) {
         tableHeader.innerHTML = `
             <th>Asset Name</th>
-            <th>Category</th>
+            <th class="hide-mobile">Category</th>
             <th>Status</th>
-            <th>Last Action</th>
+            <th class="hide-mobile">Last Action</th>
             <th>Actions</th>
         `;
     }
@@ -149,27 +154,48 @@ function renderInventory(items) {
         const tr = document.createElement('tr');
         tr.className = 'animate-in';
         
+        const isExpanded = openKitIds.has(asset.id);
+        const hasComponents = asset.components && asset.components.length > 0;
+
         tr.innerHTML = `
             <td>
                 <div style="font-weight:600">${asset.name}</div>
-                ${asset.components ? `<button class="btn-text" onclick="viewComponents(${asset.id})" style="color:var(--accent); background:none; border:none; padding:0; cursor:pointer; font-size:0.75rem;">View components</button>` : ''}
+                ${hasComponents ? `
+                    <button class="toggle-components-btn" onclick="toggleComponents(${asset.id})">
+                        <i data-lucide="${isExpanded ? 'chevron-up' : 'chevron-down'}" style="width:14px;"></i>
+                        ${isExpanded ? 'Hide' : 'Show'} ${asset.components.length} components
+                    </button>
+                    ${isExpanded ? `
+                        <div class="inline-components-list">
+                            ${asset.components.map(c => `
+                                <div class="inline-component-item">
+                                    <span>${c.name}</span>
+                                    <span>x${c.qty}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : ''}
+                ` : ''}
             </td>
-            <td>${asset.category}</td>
+            <td class="hide-mobile">${asset.category}</td>
             <td>
                 <span class="status-badge status-${asset.status}">
                     ${asset.status.replace('-', ' ').charAt(0).toUpperCase() + asset.status.replace('-', ' ').slice(1)}
                 </span>
             </td>
-            <td>
+            <td class="hide-mobile">
                 <div style="font-size:0.8rem">${asset.last_action || 'No record'}</div>
                 ${asset.borrower_name ? `<small style="color:var(--accent)">By ${asset.borrower_name}</small>` : ''}
             </td>
             <td>
-                <div style="display:flex; gap:0.5rem;">
+                <div style="display:flex; gap:0.5rem; flex-wrap: wrap;">
                     <button class="btn btn-outline btn-sm" onclick="handleAction(${asset.id})">
                         ${asset.status === 'available' ? 'Sign Out' : asset.status === 'signed-out' ? 'Sign In' : 'Details'}
                     </button>
-                    ${asset.status === 'available' ? `<button class="btn btn-outline btn-sm" onclick="flagBroken(${asset.id})" title="Report Broken"><i data-lucide="alert-triangle"></i></button>` : ''}
+                    <button class="btn btn-outline btn-sm" onclick="openAssetModal(${asset.id})" title="Edit Item">
+                        <i data-lucide="edit-3" style="width:14px;"></i>
+                    </button>
+                    ${asset.status === 'available' ? `<button class="btn btn-outline btn-sm" onclick="flagDamaged(${asset.id})" title="Report Damaged"><i data-lucide="alert-triangle" style="width:14px;"></i></button>` : ''}
                 </div>
             </td>
         `;
@@ -178,6 +204,15 @@ function renderInventory(items) {
     
     if (window.lucide) lucide.createIcons();
 }
+
+window.toggleComponents = (id) => {
+    if (openKitIds.has(id)) {
+        openKitIds.delete(id);
+    } else {
+        openKitIds.add(id);
+    }
+    renderInventory(filteredAssets);
+};
 
 // Modal System Logic
 function openModal(html) {
@@ -198,28 +233,126 @@ window.closeModal = () => {
     document.getElementById('modal-container').style.display = 'none';
 };
 
-window.viewComponents = (id) => {
-    const asset = assets.find(a => a.id === id);
-    if (!asset.components) return;
-    
-    let componentsHtml = asset.components.map(c => `
-        <div class="component-item">
-            <span>${c.name}</span>
-            <span style="font-weight:700">x${c.qty}</span>
-        </div>
-    `).join('');
+function openAssetModal(editId = null) {
+    const asset = editId ? assets.find(a => a.id === editId) : null;
+    const isEdit = !!asset;
 
+    let categoryOptions = categories.map(c => `<option value="${c}" ${asset?.category === c ? 'selected' : ''}>${c}</option>`).join('');
+    
     openModal(`
         <div class="modal-header">
-            <h2>${asset.name} Components</h2>
+            <h2>${isEdit ? 'Edit Asset' : 'Add New Asset'}</h2>
+            <p style="color:var(--text-muted)">${isEdit ? 'Modify asset details and components.' : 'Register a new item at Sheen Academy.'}</p>
         </div>
-        <div class="components-list">
-            ${componentsHtml}
+        <div class="form-group">
+            <label>Asset Name</label>
+            <input type="text" id="asset-name" class="form-control" value="${asset?.name || ''}" placeholder="e.g. LEGO Spike Prime #5">
         </div>
-        <div style="margin-top:2rem; display:flex; justify-content:flex-end;">
-            <button class="btn btn-primary" onclick="closeModal()">Close</button>
+        <div class="form-group">
+            <label>Category</label>
+            <div style="display:flex; gap:0.5rem;">
+                <select id="asset-category-select" class="form-control" style="flex:1;">
+                    <option value="">-- Select Category --</option>
+                    ${categoryOptions}
+                    <option value="__NEW__">+ Add New Category</option>
+                </select>
+            </div>
+            <input type="text" id="asset-category-new" class="form-control" placeholder="Enter new category name" style="display:none; margin-top:0.5rem;">
+        </div>
+        
+        <div class="form-group" style="margin-top:2rem;">
+            <label style="display:flex; justify-content:space-between; align-items:center;">
+                Attached Components (Kits)
+                <button class="btn btn-outline btn-sm" onclick="addComponentRow()">+ Add Part</button>
+            </label>
+            <div id="component-builder" style="margin-top:1rem;">
+                <!-- Rows injected here -->
+            </div>
+        </div>
+
+        <div style="display:flex; gap:1rem; justify-content:flex-end; margin-top:2rem;">
+            <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="confirmSaveAsset(${editId})">${isEdit ? 'Save Changes' : 'Add Asset'}</button>
         </div>
     `);
+
+    // Handle initial components if editing
+    if (isEdit && asset.components) {
+        asset.components.forEach(c => addComponentRow(c.name, c.qty));
+    } else if (!isEdit) {
+        // add one empty row as a hint
+        // addComponentRow(); 
+    }
+
+    // Dynamic Category Handler
+    const select = document.getElementById('asset-category-select');
+    const nextInput = document.getElementById('asset-category-new');
+    select.addEventListener('change', (e) => {
+        nextInput.style.display = e.target.value === '__NEW__' ? 'block' : 'none';
+        if (e.target.value === '__NEW__') nextInput.focus();
+    });
+}
+
+window.addComponentRow = (name = '', qty = 1) => {
+    const builder = document.getElementById('component-builder');
+    const div = document.createElement('div');
+    div.className = 'component-builder-row animate-in';
+    div.innerHTML = `
+        <input type="text" placeholder="Part Name (e.g. Hub)" class="form-control comp-name" value="${name}" style="flex:2;">
+        <input type="number" placeholder="Qty" class="form-control comp-qty" value="${qty}" style="flex:1;">
+        <button class="btn btn-outline btn-sm" onclick="this.parentElement.remove()" style="color:var(--danger); border-color:rgba(239, 68, 68, 0.2)">
+            <i data-lucide="trash-2" style="width:14px;"></i>
+        </button>
+    `;
+    builder.appendChild(div);
+    if (window.lucide) lucide.createIcons();
+};
+
+window.confirmSaveAsset = async (editId = null) => {
+    const name = document.getElementById('asset-name').value;
+    const catSelect = document.getElementById('asset-category-select').value;
+    const catNew = document.getElementById('asset-category-new').value;
+    
+    let category = catSelect === '__NEW__' ? catNew : catSelect;
+
+    if (!name || !category) {
+        alert("Please provide both a Name and a Category.");
+        return;
+    }
+
+    // Collect components
+    const rows = document.querySelectorAll('.component-builder-row');
+    const components = [];
+    rows.forEach(row => {
+        const cName = row.querySelector('.comp-name').value.trim();
+        const cQty = parseInt(row.querySelector('.comp-qty').value);
+        if (cName) {
+            components.push({ name: cName, qty: isNaN(cQty) ? 1 : cQty });
+        }
+    });
+
+    const payload = {
+        name,
+        category,
+        components: components.length > 0 ? components : null,
+    };
+
+    if (!editId) {
+        // Creating new
+        payload.status = 'available';
+        payload.condition = 'good';
+        payload.last_action = `Registered - ${new Date().toISOString().split('T')[0]}`;
+        
+        const { error } = await supabase.from('assets').insert([payload]);
+        if (error) alert("Error saving asset: " + error.message);
+    } else {
+        // Updating existing
+        const { error } = await supabase.from('assets').update(payload).eq('id', editId);
+        if (error) alert("Error updating asset: " + error.message);
+    }
+
+    closeModal();
+    await loadData();
 };
 
 window.handleAction = (id) => {
@@ -236,7 +369,7 @@ window.handleAction = (id) => {
                 <label>Inventory Condition Update</label>
                 <select id="return-condition" class="form-control">
                     <option value="good">Still Good</option>
-                    <option value="broken">Item is Broken</option>
+                    <option value="damaged">Item is Damaged</option>
                 </select>
             </div>
             <div style="display:flex; gap:1rem; justify-content:flex-end; margin-top:2rem;">
@@ -278,8 +411,7 @@ window.confirmSignOut = async (id) => {
     const today = new Date().toISOString().split('T')[0];
     const asset = assets.find(a => a.id === id);
 
-    // Concurrency Lock: update ONLY IF status is still 'available'
-    const { data: updateData, error: updateError, count } = await supabase
+    const { data: updateData, error: updateError } = await supabase
         .from('assets')
         .update({
             status: 'signed-out',
@@ -292,13 +424,12 @@ window.confirmSignOut = async (id) => {
         .select();
 
     if (updateError || !updateData || updateData.length === 0) {
-        alert("CONCURRENCY ERROR: This asset was just signed out by another colleague. Refreshing list...");
+        alert("CONCURRENCY ERROR: This asset was just signed out by another colleague.");
         await loadData();
         closeModal();
         return;
     }
 
-    // Add to history
     await supabase.from('transactions').insert([{
         asset_id: id,
         asset_name: asset.name,
@@ -319,45 +450,44 @@ window.confirmSignIn = async (id) => {
     const borrower = asset.borrower_name;
     
     await supabase.from('assets').update({
-        status: condition === 'broken' ? 'broken' : 'available',
+        status: condition === 'damaged' ? 'damaged' : 'available',
         condition: condition,
         borrower_name: null,
         reason: null,
         last_action: `Returned - ${today}`
     }).eq('id', id);
 
-    // Add to history
     await supabase.from('transactions').insert([{
         asset_id: id,
         asset_name: asset.name,
         user_name: borrower || "Unknown",
         action: "Returned",
         date: today,
-        reason: condition === 'broken' ? "Returned (Damaged/Broken)" : "Regular Return"
+        reason: condition === 'damaged' ? "Returned (Damaged)" : "Regular Return"
     }]);
 
     closeModal();
     await loadData();
 };
 
-window.flagBroken = async (id) => {
+window.flagDamaged = async (id) => {
     const asset = assets.find(a => a.id === id);
-    if(confirm(`Are you sure you want to flag "${asset.name}" as BROKEN?`)) {
+    if(confirm(`Are you sure you want to flag "${asset.name}" as DAMAGED?`)) {
         const today = new Date().toISOString().split('T')[0];
         
         await supabase.from('assets').update({
-            status: 'broken',
-            condition: 'broken',
-            last_action: `Flagged Broken - ${today}`
+            status: 'damaged',
+            condition: 'damaged',
+            last_action: `Flagged Damaged - ${today}`
         }).eq('id', id);
 
         await supabase.from('transactions').insert([{
             asset_id: id,
             asset_name: asset.name,
             user_name: "Staff",
-            action: "Flagged Broken",
+            action: "Flagged Damaged",
             date: today,
-            reason: "Reported as broken by staff member"
+            reason: "Reported as damaged by staff member"
         }]);
 
         await loadData();
@@ -408,75 +538,3 @@ function renderHistory() {
         body.appendChild(tr);
     });
 }
-
-function openAddAssetModal() {
-    openModal(`
-        <div class="modal-header">
-            <h2>Add New Asset</h2>
-            <p style="color:var(--text-muted)">Register a new item at Sheen Academy.</p>
-        </div>
-        <div class="form-group">
-            <label>Asset Name</label>
-            <input type="text" id="new-asset-name" class="form-control" placeholder="e.g. LEGO Spike Prime #5">
-        </div>
-        <div class="form-group">
-            <label>Category</label>
-            <select id="new-asset-category" class="form-control">
-                <option value="Classroom">Classroom</option>
-                <option value="Office">Office</option>
-                <option value="Robotics">Robotics</option>
-                <option value="Equipment">Ordinary Equipment</option>
-            </select>
-        </div>
-        <div id="robotics-config" style="display:none; margin-top:1rem;">
-             <label style="color:var(--accent); font-size:0.8rem; display:block; margin-bottom:0.5rem;">Robotics Components (JSON format)</label>
-             <textarea id="new-asset-components" class="form-control" rows="3" placeholder='[{"name": "Hub", "qty": 1}]'></textarea>
-        </div>
-        <div style="display:flex; gap:1rem; justify-content:flex-end; margin-top:2rem;">
-            <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
-            <button class="btn btn-primary" onclick="confirmAddAsset()">Add Asset</button>
-        </div>
-    `);
-
-    // Toggle robotics components field
-    document.getElementById('new-asset-category').addEventListener('change', (e) => {
-        document.getElementById('robotics-config').style.display = e.target.value === 'Robotics' ? 'block' : 'none';
-    });
-}
-
-window.confirmAddAsset = async () => {
-    const name = document.getElementById('new-asset-name').value;
-    const category = document.getElementById('new-asset-category').value;
-    const componentsRaw = document.getElementById('new-asset-components')?.value;
-    
-    if (!name) {
-        alert("Please enter an asset name.");
-        return;
-    }
-
-    let components = null;
-    if (category === 'Robotics' && componentsRaw) {
-        try {
-            components = JSON.parse(componentsRaw);
-        } catch (e) {
-            alert("Invalid JSON format for components. Please check your input.");
-            return;
-        }
-    }
-
-    const { error } = await supabase.from('assets').insert([{
-        name,
-        category,
-        components,
-        status: 'available',
-        condition: 'good',
-        last_action: `Registered - ${new Date().toISOString().split('T')[0]}`
-    }]);
-
-    if (error) {
-        alert("Error adding asset: " + error.message);
-    } else {
-        closeModal();
-        await loadData();
-    }
-};

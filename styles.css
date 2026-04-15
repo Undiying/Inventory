@@ -190,7 +190,7 @@ tr:last-child td {
 
 .status-available { background: rgba(16, 185, 129, 0.1); color: var(--success); }
 .status-signed-out { background: rgba(245, 158, 11, 0.1); color: var(--warning); }
-.status-broken { background: rgba(239, 68, 68, 0.1); color: var(--danger); }
+.status-damaged { background: rgba(239, 68, 68, 0.1); color: var(--danger); }
 
 /* Buttons */
 .btn {
@@ -413,6 +413,47 @@ tr:last-child td {
         width: 90%;
         padding: 1.5rem;
     }
+}
+
+/* Component Builder & Toggleable Lists */
+.component-builder-row {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    align-items: center;
+}
+
+.toggle-components-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    background: transparent;
+    border: none;
+    color: var(--accent);
+    font-size: 0.75rem;
+    cursor: pointer;
+    padding: 0.25rem 0;
+    font-weight: 500;
+}
+
+.inline-components-list {
+    margin-top: 0.5rem;
+    padding: 0.75rem;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    font-size: 0.8rem;
+    max-width: 300px;
+}
+
+.inline-component-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.25rem 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+}
+
+.inline-component-item:last-child {
+    border-bottom: none;
 }
 
 /* Animations */
