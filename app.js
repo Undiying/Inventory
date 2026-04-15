@@ -1,29 +1,13 @@
+import supabase from './supabase-config.js';
+
 // State management
-let assets = [
-    { id: 1, name: "Dell Latitude 5420", category: "Office", status: "available", condition: "good", lastAction: "Returned - 2024-04-10" },
-    { id: 2, name: "LEGO Spike Prime Kit #1", category: "Robotics", status: "signed-out", condition: "new", currentUser: "Alice Smith", reason: "Class 7A Robotics", lastAction: "Signed Out - 2024-04-14", components: [
-        { name: "Hub", qty: 1 },
-        { name: "Large Motor", qty: 2 },
-        { name: "Color Sensor", qty: 1 }
-    ]},
-    { id: 3, name: "Classroom iPad Pro #5", category: "Classroom", status: "broken", condition: "broken", lastAction: "Flagged - 2024-04-12" },
-    { id: 4, name: "VEX IQ Gen 2 Starter", category: "Robotics", status: "available", condition: "good", lastAction: "Returned - 2024-04-01", components: [
-        { name: "Brain", qty: 1 },
-        { name: "Touch LED", qty: 1 }
-    ]}
-];
-
-let transactions = [
-    { date: "2024-04-14", assetName: "LEGO Spike Prime Kit #1", user: "Alice Smith", action: "Signed Out", reason: "Class 7A Robotics" },
-    { date: "2024-04-12", assetName: "Classroom iPad Pro #5", user: "Technician", action: "Flagged Broken", reason: "Cracked screen reported by teacher" }
-];
-
-let filteredAssets = [...assets];
+let assets = [];
+let transactions = [];
+let filteredAssets = [];
 
 // Initialize UI
-document.addEventListener('DOMContentLoaded', () => {
-    updateStats();
-    renderInventory(assets);
+document.addEventListener('DOMContentLoaded', async () => {
+    await loadData();
     
     // Setup event listeners for navigation
     document.getElementById('nav-dashboard').addEventListener('click', (e) => {
@@ -35,8 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
         setActiveLink('nav-inventory');
         document.getElementById('page-title').textContent = "All Inventory";
-        filteredAssets = [...assets];
-        renderInventory(filteredAssets);
+        applyFilters();
     });
 
     document.getElementById('nav-robotics').addEventListener('click', (e) => {
@@ -54,25 +37,34 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Search input handler
-    document.getElementById('inventory-search').addEventListener('input', (e) => {
+    document.getElementById('inventory-search').addEventListener('input', () => {
         applyFilters();
     });
 });
 
-function applyFilters() {
-    const searchTerm = document.getElementById('inventory-search').value.toLowerCase();
-    const activeNav = document.querySelector('.nav-link.active').id;
+async function loadData() {
+    const { data: assetsData, error: assetsError } = await supabase
+        .from('assets')
+        .select('*')
+        .order('name', { ascending: true });
+
+    const { data: transData, error: transError } = await supabase
+        .from('transactions')
+        .select('*')
+        .order('date', { ascending: false })
+        .limit(50);
+
+    if (assetsError || transError) {
+        console.error("Error loading data:", assetsError || transError);
+        return;
+    }
+
+    assets = assetsData;
+    transactions = transData;
+    filteredAssets = [...assets];
     
-    let baseItems = [...assets];
-    if (activeNav === 'nav-robotics') baseItems = baseItems.filter(a => a.category === 'Robotics');
-    
-    filteredAssets = baseItems.filter(item => 
-        item.name.toLowerCase().includes(searchTerm) || 
-        item.category.toLowerCase().includes(searchTerm) ||
-        (item.currentUser && item.currentUser.toLowerCase().includes(searchTerm))
-    );
-    
-    renderInventory(filteredAssets);
+    updateStats();
+    applyFilters();
 }
 
 function setActiveLink(id) {
@@ -97,6 +89,22 @@ function updateStats() {
     if(brokenEl) brokenEl.textContent = broken;
 }
 
+function applyFilters() {
+    const searchTerm = document.getElementById('inventory-search').value.toLowerCase();
+    const activeNav = document.querySelector('.nav-link.active').id;
+    
+    let baseItems = [...assets];
+    if (activeNav === 'nav-robotics') baseItems = baseItems.filter(a => a.category === 'Robotics');
+    
+    filteredAssets = baseItems.filter(item => 
+        item.name.toLowerCase().includes(searchTerm) || 
+        item.category.toLowerCase().includes(searchTerm) ||
+        (item.borrower_name && item.borrower_name.toLowerCase().includes(searchTerm))
+    );
+    
+    renderInventory(filteredAssets);
+}
+
 function renderInventory(items) {
     const tableHeader = document.querySelector('thead tr');
     if (tableHeader) {
@@ -110,6 +118,8 @@ function renderInventory(items) {
     }
 
     const body = document.getElementById('inventory-body');
+    if(!body) return;
+    body.innerHTML = '';
 
     items.forEach(asset => {
         const tr = document.createElement('tr');
@@ -118,7 +128,7 @@ function renderInventory(items) {
         tr.innerHTML = `
             <td>
                 <div style="font-weight:600">${asset.name}</div>
-                ${asset.components ? `<button class="btn-text" onclick="viewComponents(${asset.id})" style="color:var(--accent); background:none; border:none; padding:0; cursor:pointer; font-size:0.75rem;">View ${asset.components.length} components</button>` : ''}
+                ${asset.components ? `<button class="btn-text" onclick="viewComponents(${asset.id})" style="color:var(--accent); background:none; border:none; padding:0; cursor:pointer; font-size:0.75rem;">View components</button>` : ''}
             </td>
             <td>${asset.category}</td>
             <td>
@@ -127,8 +137,8 @@ function renderInventory(items) {
                 </span>
             </td>
             <td>
-                <div style="font-size:0.8rem">${asset.lastAction}</div>
-                ${asset.currentUser ? `<small style="color:var(--accent)">By ${asset.currentUser}</small>` : ''}
+                <div style="font-size:0.8rem">${asset.last_action || 'No record'}</div>
+                ${asset.borrower_name ? `<small style="color:var(--accent)">By ${asset.borrower_name}</small>` : ''}
             </td>
             <td>
                 <div style="display:flex; gap:0.5rem;">
@@ -166,6 +176,8 @@ window.closeModal = () => {
 
 window.viewComponents = (id) => {
     const asset = assets.find(a => a.id === id);
+    if (!asset.components) return;
+    
     let componentsHtml = asset.components.map(c => `
         <div class="component-item">
             <span>${c.name}</span>
@@ -209,13 +221,6 @@ window.handleAction = (id) => {
             </div>
         `);
     } else if (asset.status === 'available') {
-        // Double Check Simulation (Prevention Logic)
-        // In a real app, this would be a fresh fetch from DB
-        if (asset.status !== 'available') {
-            alert("Error: This item was just signed out by another colleague. refreshing list...");
-            return;
-        }
-
         openModal(`
             <div class="modal-header">
                 <h2>Sign Out Asset</h2>
@@ -237,7 +242,7 @@ window.handleAction = (id) => {
     }
 };
 
-window.confirmSignOut = (id) => {
+window.confirmSignOut = async (id) => {
     const name = document.getElementById('signer-name').value;
     const reason = document.getElementById('signer-reason').value;
     
@@ -246,67 +251,92 @@ window.confirmSignOut = (id) => {
         return;
     }
 
+    const today = new Date().toISOString().split('T')[0];
     const asset = assets.find(a => a.id === id);
-    
-    // Final Concurrency Check (Simulation)
-    if (asset.status !== 'available') {
-        alert("CRITICAL ERROR: This asset is no longer available. It may have been signed out recently.");
+
+    // Concurrency Lock: update ONLY IF status is still 'available'
+    const { data: updateData, error: updateError, count } = await supabase
+        .from('assets')
+        .update({
+            status: 'signed-out',
+            borrower_name: name,
+            reason: reason,
+            last_action: `Signed Out - ${today}`
+        })
+        .eq('id', id)
+        .eq('status', 'available')
+        .select();
+
+    if (updateError || !updateData || updateData.length === 0) {
+        alert("CONCURRENCY ERROR: This asset was just signed out by another colleague. Refreshing list...");
+        await loadData();
         closeModal();
         return;
     }
 
-    asset.status = 'signed-out';
-    asset.currentUser = name;
-    asset.reason = reason;
-    asset.lastAction = `Signed Out - ${new Date().toISOString().split('T')[0]}`;
-    
     // Add to history
-    transactions.unshift({
-        date: new Date().toISOString().split('T')[0],
-        assetName: asset.name,
-        user: name,
+    await supabase.from('transactions').insert([{
+        asset_id: id,
+        asset_name: asset.name,
+        user_name: name,
         action: "Signed Out",
+        date: today,
         reason: reason
-    });
-
+    }]);
+    
     closeModal();
-    updateStats();
-    renderInventory(filteredAssets);
+    await loadData();
 };
 
-window.confirmSignIn = (id) => {
+window.confirmSignIn = async (id) => {
     const condition = document.getElementById('return-condition').value;
+    const today = new Date().toISOString().split('T')[0];
     const asset = assets.find(a => a.id === id);
+    const borrower = asset.borrower_name;
     
-    asset.status = condition === 'broken' ? 'broken' : 'available';
-    asset.condition = condition;
-    asset.lastAction = `Returned - ${new Date().toISOString().split('T')[0]}`;
-    
-    // Add to history
-    transactions.unshift({
-        date: new Date().toISOString().split('T')[0],
-        assetName: asset.name,
-        user: asset.currentUser || "Unknown",
-        action: "Returned",
-        reason: condition === 'broken' ? "Returned (Damaged/Broken)" : "Regular Return"
-    });
+    await supabase.from('assets').update({
+        status: condition === 'broken' ? 'broken' : 'available',
+        condition: condition,
+        borrower_name: null,
+        reason: null,
+        last_action: `Returned - ${today}`
+    }).eq('id', id);
 
-    delete asset.currentUser;
-    delete asset.reason;
+    // Add to history
+    await supabase.from('transactions').insert([{
+        asset_id: id,
+        asset_name: asset.name,
+        user_name: borrower || "Unknown",
+        action: "Returned",
+        date: today,
+        reason: condition === 'broken' ? "Returned (Damaged/Broken)" : "Regular Return"
+    }]);
 
     closeModal();
-    updateStats();
-    renderInventory(filteredAssets);
+    await loadData();
 };
 
-window.flagBroken = (id) => {
+window.flagBroken = async (id) => {
     const asset = assets.find(a => a.id === id);
     if(confirm(`Are you sure you want to flag "${asset.name}" as BROKEN?`)) {
-        asset.status = 'broken';
-        asset.condition = 'broken';
-        asset.lastAction = `Flagged Broken - ${new Date().toISOString().split('T')[0]}`;
-        updateStats();
-        renderInventory(filteredAssets);
+        const today = new Date().toISOString().split('T')[0];
+        
+        await supabase.from('assets').update({
+            status: 'broken',
+            condition: 'broken',
+            last_action: `Flagged Broken - ${today}`
+        }).eq('id', id);
+
+        await supabase.from('transactions').insert([{
+            asset_id: id,
+            asset_name: asset.name,
+            user_name: "Staff",
+            action: "Flagged Broken",
+            date: today,
+            reason: "Reported as broken by staff member"
+        }]);
+
+        await loadData();
     }
 };
 
@@ -314,8 +344,7 @@ function showDashboard() {
     setActiveLink('nav-dashboard');
     document.getElementById('page-title').textContent = "Inventory Dashboard";
     document.getElementById('page-description').textContent = "Overview of Sheen Academy assets and availability.";
-    filteredAssets = [...assets];
-    renderInventory(filteredAssets);
+    applyFilters();
 }
 
 function renderHistory() {
@@ -324,15 +353,18 @@ function renderHistory() {
     
     pageDescription.textContent = "Full audit log of all item movements and condition updates.";
     
-    tableHeader.innerHTML = `
-        <th>Date</th>
-        <th>Asset Name</th>
-        <th>Person</th>
-        <th>Action</th>
-        <th>Reason</th>
-    `;
+    if (tableHeader) {
+        tableHeader.innerHTML = `
+            <th>Date</th>
+            <th>Asset Name</th>
+            <th>Person</th>
+            <th>Action</th>
+            <th>Reason</th>
+        `;
+    }
 
     const body = document.getElementById('inventory-body');
+    if(!body) return;
     body.innerHTML = '';
 
     transactions.forEach(t => {
@@ -340,8 +372,8 @@ function renderHistory() {
         tr.className = 'animate-in';
         tr.innerHTML = `
             <td>${t.date}</td>
-            <td style="font-weight:600">${t.assetName}</td>
-            <td>${t.user}</td>
+            <td style="font-weight:600">${t.asset_name}</td>
+            <td>${t.user_name}</td>
             <td>
                 <span class="status-badge ${t.action === 'Signed Out' ? 'status-signed-out' : 'status-available'}">
                     ${t.action}
