@@ -16,9 +16,23 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
+    <!-- Mobile Header -->
+    <div class="mobile-header">
+        <div class="sidebar-logo" style="margin-bottom:0; font-size:1.2rem;">
+            <i data-lucide="shield-check"></i>
+            <span>Sheen Academy</span>
+        </div>
+        <button id="mobile-nav-toggle" class="btn btn-outline" style="padding:0.5rem;">
+            <i data-lucide="menu"></i>
+        </button>
+    </div>
+
     <div class="app-container">
         <!-- Sidebar Navigation -->
-        <aside class="sidebar">
+        <aside class="sidebar" id="app-sidebar">
+            <button class="mobile-close-btn" id="mobile-sidebar-close">
+                <i data-lucide="x"></i>
+            </button>
             <div class="sidebar-logo">
                 <i data-lucide="shield-check"></i>
                 <span>Sheen Academy</span>

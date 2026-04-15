@@ -40,6 +40,30 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('inventory-search').addEventListener('input', () => {
         applyFilters();
     });
+
+    // Add Asset Button
+    document.getElementById('add-asset-btn').addEventListener('click', () => {
+        openAddAssetModal();
+    });
+
+    // Mobile Navigation
+    const sidebar = document.getElementById('app-sidebar');
+    document.getElementById('mobile-nav-toggle').addEventListener('click', () => {
+        sidebar.classList.add('open');
+    });
+
+    document.getElementById('mobile-sidebar-close').addEventListener('click', () => {
+        sidebar.classList.remove('open');
+    });
+
+    // Close sidebar on link click (mobile)
+    document.querySelectorAll('.nav-link').forEach(link => {
+        link.addEventListener('click', () => {
+            if (window.innerWidth <= 1024) {
+                sidebar.classList.remove('open');
+            }
+        });
+    });
 });
 
 async function loadData() {
@@ -384,3 +408,75 @@ function renderHistory() {
         body.appendChild(tr);
     });
 }
+
+function openAddAssetModal() {
+    openModal(`
+        <div class="modal-header">
+            <h2>Add New Asset</h2>
+            <p style="color:var(--text-muted)">Register a new item at Sheen Academy.</p>
+        </div>
+        <div class="form-group">
+            <label>Asset Name</label>
+            <input type="text" id="new-asset-name" class="form-control" placeholder="e.g. LEGO Spike Prime #5">
+        </div>
+        <div class="form-group">
+            <label>Category</label>
+            <select id="new-asset-category" class="form-control">
+                <option value="Classroom">Classroom</option>
+                <option value="Office">Office</option>
+                <option value="Robotics">Robotics</option>
+                <option value="Equipment">Ordinary Equipment</option>
+            </select>
+        </div>
+        <div id="robotics-config" style="display:none; margin-top:1rem;">
+             <label style="color:var(--accent); font-size:0.8rem; display:block; margin-bottom:0.5rem;">Robotics Components (JSON format)</label>
+             <textarea id="new-asset-components" class="form-control" rows="3" placeholder='[{"name": "Hub", "qty": 1}]'></textarea>
+        </div>
+        <div style="display:flex; gap:1rem; justify-content:flex-end; margin-top:2rem;">
+            <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="confirmAddAsset()">Add Asset</button>
+        </div>
+    `);
+
+    // Toggle robotics components field
+    document.getElementById('new-asset-category').addEventListener('change', (e) => {
+        document.getElementById('robotics-config').style.display = e.target.value === 'Robotics' ? 'block' : 'none';
+    });
+}
+
+window.confirmAddAsset = async () => {
+    const name = document.getElementById('new-asset-name').value;
+    const category = document.getElementById('new-asset-category').value;
+    const componentsRaw = document.getElementById('new-asset-components')?.value;
+    
+    if (!name) {
+        alert("Please enter an asset name.");
+        return;
+    }
+
+    let components = null;
+    if (category === 'Robotics' && componentsRaw) {
+        try {
+            components = JSON.parse(componentsRaw);
+        } catch (e) {
+            alert("Invalid JSON format for components. Please check your input.");
+            return;
+        }
+    }
+
+    const { error } = await supabase.from('assets').insert([{
+        name,
+        category,
+        components,
+        status: 'available',
+        condition: 'good',
+        last_action: `Registered - ${new Date().toISOString().split('T')[0]}`
+    }]);
+
+    if (error) {
+        alert("Error adding asset: " + error.message);
+    } else {
+        closeModal();
+        await loadData();
+    }
+};
