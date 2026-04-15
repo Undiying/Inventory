@@ -196,6 +196,9 @@ function renderInventory(items) {
                         <i data-lucide="edit-3" style="width:14px;"></i>
                     </button>
                     ${asset.status === 'available' ? `<button class="btn btn-outline btn-sm" onclick="flagDamaged(${asset.id})" title="Report Damaged"><i data-lucide="alert-triangle" style="width:14px;"></i></button>` : ''}
+                    <button class="btn btn-outline btn-sm" onclick="deleteAsset(${asset.id})" title="Delete Asset" style="color:var(--danger); border-color:rgba(239, 68, 68, 0.2)">
+                        <i data-lucide="trash-2" style="width:14px;"></i>
+                    </button>
                 </div>
             </td>
         `;
@@ -468,6 +471,39 @@ window.confirmSignIn = async (id) => {
 
     closeModal();
     await loadData();
+};
+
+window.deleteAsset = async (id) => {
+    const asset = assets.find(a => a.id === id);
+    if (!asset) return;
+
+    if (asset.status === 'signed-out') {
+        alert("Cannot delete an asset that is currently signed out. Please have it returned first.");
+        return;
+    }
+
+    if (confirm(`Are you sure you want to PERMANENTLY delete "${asset.name}"? This action cannot be undone.`)) {
+        const today = new Date().toISOString().split('T')[0];
+
+        // 1. Log the deletion for audit purposes
+        await supabase.from('transactions').insert([{
+            asset_id: id,
+            asset_name: asset.name,
+            user_name: "Staff",
+            action: "Deleted",
+            date: today,
+            reason: "Asset removed from inventory permanently"
+        }]);
+
+        // 2. Delete from database
+        const { error } = await supabase.from('assets').delete().eq('id', id);
+
+        if (error) {
+            alert("Error deleting asset: " + error.message);
+        } else {
+            await loadData();
+        }
+    }
 };
 
 window.flagDamaged = async (id) => {
