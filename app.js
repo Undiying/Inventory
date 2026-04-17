@@ -315,15 +315,10 @@ window.openAssetModal = (editId = null) => {
                 <input type="checkbox" id="bulk-mode-toggle" onchange="toggleBulkFields(this.checked)">
             </div>
             
-            <div id="bulk-options" style="display:none; margin-top:1rem; grid-template-columns: 1fr 1fr; gap:1rem;">
-                <div>
-                    <label style="font-size:0.75rem;">Quantity</label>
-                    <input type="number" id="bulk-quantity" class="form-control" value="5" min="2" max="50">
-                </div>
-                <div>
-                    <label style="font-size:0.75rem;">ID Start #</label>
-                    <input type="number" id="bulk-start-num" class="form-control" value="1" min="1">
-                </div>
+            <div id="bulk-options" style="display:none; margin-top:1rem;">
+                <label style="font-size:0.75rem;">Asset IDs (One per line)</label>
+                <textarea id="bulk-ids" class="form-control" rows="5" placeholder="SHN-A8AA&#10;SHN-1836&#10;SHN-5F0A" style="font-family:monospace; margin-top:0.25rem; resize: vertical;"></textarea>
+                <small style="color:var(--text-muted); font-size:0.7rem; margin-top:0.5rem; display:block;">Pasting IDs here will create one asset for each line.</small>
             </div>
         </div>
         ` : ''}
@@ -362,19 +357,21 @@ window.openAssetModal = (editId = null) => {
 }
 
 window.toggleBulkFields = (checked) => {
-    document.getElementById('bulk-options').style.display = checked ? 'grid' : 'none';
-    document.getElementById('bulk-hint').style.display = checked ? 'block' : 'none';
-    const idLabel = document.getElementById('id-label');
+    document.getElementById('bulk-options').style.display = checked ? 'block' : 'none';
+    document.getElementById('bulk-hint').style.display = (checked) ? 'none' : 'none'; // Hide placeholder hint in bulk mode
+    
+    const idRow = document.getElementById('tracking-id-container');
+    const idInputColumn = idRow.firstElementChild;
     const idInput = document.getElementById('asset-tracking-id');
     
     if (checked) {
-        idLabel.textContent = "ID Pattern";
-        idInput.placeholder = "e.g. Kit-{#}";
-        if (!idInput.value) idInput.value = "Kit-{#}";
+        idInputColumn.style.opacity = '0.5';
+        idInputColumn.style.pointerEvents = 'none';
+        idInput.value = "(Using bulk list below)";
     } else {
-        idLabel.textContent = "Tracking ID";
-        idInput.placeholder = "e.g. #001";
-        if (idInput.value === "Kit-{#}") idInput.value = "";
+        idInputColumn.style.opacity = '1';
+        idInputColumn.style.pointerEvents = 'all';
+        if (idInput.value === "(Using bulk list below)") idInput.value = "";
     }
 };
 
@@ -425,23 +422,26 @@ window.confirmSaveAsset = async (editId = null) => {
 
     if (!editId) {
         if (isBulk) {
-            const qty = parseInt(document.getElementById('bulk-quantity').value);
-            const startNum = parseInt(document.getElementById('bulk-start-num').value);
-            const payloads = [];
-            
-            for (let i = 0; i < qty; i++) {
-                const currentNum = startNum + i;
-                const finalId = tracking_id.replace('{#}', currentNum);
-                payloads.push({
-                    ...commonPayload,
-                    tracking_id: finalId,
-                    last_action: `Registered (Bulk) - ${new Date().toISOString().split('T')[0]}`
-                });
+            const rawIds = document.getElementById('bulk-ids').value.trim();
+            if (!rawIds) {
+                alert("Please paste some IDs first.");
+                return;
             }
+            
+            const ids = rawIds.split('\n').map(id => id.trim()).filter(id => id.length > 0);
+            const payloads = ids.map(finalId => ({
+                ...commonPayload,
+                tracking_id: finalId,
+                last_action: `Registered (Bulk) - ${new Date().toISOString().split('T')[0]}`
+            }));
             
             const { error } = await supabase.from('assets').insert(payloads);
             if (error) alert("Error saving assets: " + error.message);
         } else {
+            if (!tracking_id) {
+                alert("Please provide a Tracking ID.");
+                return;
+            }
             // Creating new (Single)
             const payload = {
                 ...commonPayload,
