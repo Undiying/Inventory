@@ -415,6 +415,7 @@ window.confirmSaveAsset = async (editId = null) => {
     const commonPayload = {
         name,
         location,
+        category: 'Asset', // Default to satisfy NOT NULL constraint
         components: components.length > 0 ? components : null,
         status: 'available',
         condition: 'good'
