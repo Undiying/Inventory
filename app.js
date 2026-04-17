@@ -121,13 +121,9 @@ function applyFilters() {
     
     let baseItems = [...assets];
     
-    // Legacy Robotics Filter: checks name or internal category if it exists
+    // Robotics Filter: identified by "kit" in the name as requested
     if (activeNav === 'nav-robotics') {
-        baseItems = baseItems.filter(a => 
-            (a.category && a.category === 'Robotics') || 
-            a.name.toLowerCase().includes('kit') ||
-            a.name.toLowerCase().includes('robotics')
-        );
+        baseItems = baseItems.filter(a => a.name.toLowerCase().includes('kit'));
     }
     
     filteredAssets = baseItems.filter(item => 
@@ -303,17 +299,40 @@ window.openAssetModal = (editId = null) => {
             <h2>${isEdit ? 'Edit Asset' : 'Add New Asset'}</h2>
             <p style="color:var(--text-muted)">${isEdit ? 'Modify asset details and components.' : 'Register a new item at Sheen Academy.'}</p>
         </div>
+        
         <div class="form-group">
             <label>Asset Name</label>
-            <div style="display:flex; flex-direction:column; gap:0.25rem;">
-                <input type="text" id="asset-name" class="form-control" value="${asset?.name || ''}" placeholder="e.g. LEGO Spike Prime">
-                <small style="color:var(--text-muted)">Items with the same name will be grouped together.</small>
+            <input type="text" id="asset-name" class="form-control" value="${asset?.name || ''}" placeholder="e.g. LEGO Spike Prime">
+        </div>
+
+        ${!isEdit ? `
+        <div style="margin-bottom: 1.5rem; background: rgba(99, 102, 241, 0.05); padding: 1rem; border-radius: 12px; border: 1px solid rgba(99, 102, 241, 0.2);">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <label style="margin-bottom:0; cursor:pointer;" for="bulk-mode-toggle">
+                    <span style="font-weight:600; color:var(--primary);">Bulk Add Mode</span>
+                    <p style="font-size:0.75rem; color:var(--text-muted); margin:0;">Create multiple items with sequential IDs.</p>
+                </label>
+                <input type="checkbox" id="bulk-mode-toggle" onchange="toggleBulkFields(this.checked)">
+            </div>
+            
+            <div id="bulk-options" style="display:none; margin-top:1rem; grid-template-columns: 1fr 1fr; gap:1rem;">
+                <div>
+                    <label style="font-size:0.75rem;">Quantity</label>
+                    <input type="number" id="bulk-quantity" class="form-control" value="5" min="2" max="50">
+                </div>
+                <div>
+                    <label style="font-size:0.75rem;">ID Start #</label>
+                    <input type="number" id="bulk-start-num" class="form-control" value="1" min="1">
+                </div>
             </div>
         </div>
-        <div class="form-group" style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem;">
+        ` : ''}
+
+        <div class="form-group" id="tracking-id-container" style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem;">
             <div>
-                <label>Tracking ID</label>
+                <label id="id-label">Tracking ID</label>
                 <input type="text" id="asset-tracking-id" class="form-control" value="${asset?.tracking_id || ''}" placeholder="e.g. #001">
+                <small id="bulk-hint" style="display:none; color:var(--text-muted); font-size:0.7rem;">Use {#} as a placeholder for numbers.</small>
             </div>
             <div>
                 <label>Current Location</label>
@@ -337,11 +356,27 @@ window.openAssetModal = (editId = null) => {
         </div>
     `);
 
-    // Handle initial components if editing
     if (isEdit && asset.components) {
         asset.components.forEach(c => addComponentRow(c.name, c.qty));
     }
 }
+
+window.toggleBulkFields = (checked) => {
+    document.getElementById('bulk-options').style.display = checked ? 'grid' : 'none';
+    document.getElementById('bulk-hint').style.display = checked ? 'block' : 'none';
+    const idLabel = document.getElementById('id-label');
+    const idInput = document.getElementById('asset-tracking-id');
+    
+    if (checked) {
+        idLabel.textContent = "ID Pattern";
+        idInput.placeholder = "e.g. Kit-{#}";
+        if (!idInput.value) idInput.value = "Kit-{#}";
+    } else {
+        idLabel.textContent = "Tracking ID";
+        idInput.placeholder = "e.g. #001";
+        if (idInput.value === "Kit-{#}") idInput.value = "";
+    }
+};
 
 window.addComponentRow = (name = '', qty = 1) => {
     const builder = document.getElementById('component-builder');
@@ -362,9 +397,10 @@ window.confirmSaveAsset = async (editId = null) => {
     const name = document.getElementById('asset-name').value;
     const tracking_id = document.getElementById('asset-tracking-id').value;
     const location = document.getElementById('asset-location').value;
+    const isBulk = document.getElementById('bulk-mode-toggle')?.checked;
 
     if (!name || !tracking_id) {
-        alert("Please provide both a Name and a Tracking ID.");
+        alert("Please provide both a Name and a Tracking ID/Pattern.");
         return;
     }
 
@@ -379,23 +415,51 @@ window.confirmSaveAsset = async (editId = null) => {
         }
     });
 
-    const payload = {
+    const commonPayload = {
         name,
-        tracking_id,
         location,
         components: components.length > 0 ? components : null,
+        status: 'available',
+        condition: 'good'
     };
 
     if (!editId) {
-        // Creating new
-        payload.status = 'available';
-        payload.condition = 'good';
-        payload.last_action = `Registered - ${new Date().toISOString().split('T')[0]}`;
-        
-        const { error } = await supabase.from('assets').insert([payload]);
-        if (error) alert("Error saving asset: " + error.message);
+        if (isBulk) {
+            const qty = parseInt(document.getElementById('bulk-quantity').value);
+            const startNum = parseInt(document.getElementById('bulk-start-num').value);
+            const payloads = [];
+            
+            for (let i = 0; i < qty; i++) {
+                const currentNum = startNum + i;
+                const finalId = tracking_id.replace('{#}', currentNum);
+                payloads.push({
+                    ...commonPayload,
+                    tracking_id: finalId,
+                    last_action: `Registered (Bulk) - ${new Date().toISOString().split('T')[0]}`
+                });
+            }
+            
+            const { error } = await supabase.from('assets').insert(payloads);
+            if (error) alert("Error saving assets: " + error.message);
+        } else {
+            // Creating new (Single)
+            const payload = {
+                ...commonPayload,
+                tracking_id,
+                last_action: `Registered - ${new Date().toISOString().split('T')[0]}`
+            };
+            
+            const { error } = await supabase.from('assets').insert([payload]);
+            if (error) alert("Error saving asset: " + error.message);
+        }
     } else {
         // Updating existing
+        const payload = {
+            name,
+            tracking_id,
+            location,
+            components: components.length > 0 ? components : null,
+        };
         const { error } = await supabase.from('assets').update(payload).eq('id', editId);
         if (error) alert("Error updating asset: " + error.message);
     }

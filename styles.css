@@ -516,6 +516,39 @@ tr:last-child td {
     font-size: 0.8rem;
 }
 
+/* Bulk Toggle Switch Style */
+input[type="checkbox"]#bulk-mode-toggle {
+    appearance: none;
+    width: 40px;
+    height: 20px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 20px;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.3s;
+    border: 1px solid var(--glass-border);
+}
+
+input[type="checkbox"]#bulk-mode-toggle:checked {
+    background: var(--primary);
+}
+
+input[type="checkbox"]#bulk-mode-toggle::before {
+    content: '';
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    background: white;
+    border-radius: 50%;
+    top: 2px;
+    left: 2px;
+    transition: transform 0.3s;
+}
+
+input[type="checkbox"]#bulk-mode-toggle:checked::before {
+    transform: translateX(20px);
+}
+
 /* Animations */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }
