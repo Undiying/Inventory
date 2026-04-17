@@ -456,6 +456,66 @@ tr:last-child td {
     border-bottom: none;
 }
 
+/* Asset Grouping & Expansion */
+.group-row {
+    background: rgba(255, 255, 255, 0.02) !important;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.group-row:hover {
+    background: rgba(99, 102, 241, 0.05) !important;
+}
+
+.group-name-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-weight: 700;
+}
+
+.asset-count-badge {
+    background: var(--glass-border);
+    color: var(--text-muted);
+    padding: 0.1rem 0.5rem;
+    border-radius: 6px;
+    font-size: 0.7rem;
+    font-weight: 500;
+}
+
+.item-row {
+    background: transparent;
+}
+
+.item-row td {
+    padding-top: 0.75rem;
+    padding-bottom: 0.75rem;
+    font-size: 0.875rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.indent-cell {
+    padding-left: 3rem !important;
+    color: var(--text-muted);
+}
+
+.chevron-icon {
+    transition: transform 0.3s ease;
+    color: var(--primary);
+}
+
+.expanded .chevron-icon {
+    transform: rotate(180deg);
+}
+
+.location-tag {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: var(--accent);
+    font-size: 0.8rem;
+}
+
 /* Animations */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(10px); }
@@ -465,3 +525,4 @@ tr:last-child td {
 .animate-in {
   animation: fadeIn 0.5s ease forwards;
 }
+

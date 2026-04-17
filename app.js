@@ -4,8 +4,8 @@ import supabase from './supabase-config.js';
 let assets = [];
 let transactions = [];
 let filteredAssets = [];
-let categories = [];
-let openKitIds = new Set(); // Track which kits have their components expanded
+let expandedGroups = new Set(); // Track which asset names are expanded
+let openKitIds = new Set(); // Track which individual assets have their components expanded
 
 // Initialize UI
 document.addEventListener('DOMContentLoaded', async () => {
@@ -89,9 +89,6 @@ async function loadData() {
     transactions = transData;
     filteredAssets = [...assets];
     
-    // Extract unique categories
-    categories = [...new Set(assets.map(a => a.category))].sort();
-
     updateStats();
     applyFilters();
 }
@@ -123,11 +120,20 @@ function applyFilters() {
     const activeNav = document.querySelector('.nav-link.active').id;
     
     let baseItems = [...assets];
-    if (activeNav === 'nav-robotics') baseItems = baseItems.filter(a => a.category === 'Robotics');
+    
+    // Legacy Robotics Filter: checks name or internal category if it exists
+    if (activeNav === 'nav-robotics') {
+        baseItems = baseItems.filter(a => 
+            (a.category && a.category === 'Robotics') || 
+            a.name.toLowerCase().includes('kit') ||
+            a.name.toLowerCase().includes('robotics')
+        );
+    }
     
     filteredAssets = baseItems.filter(item => 
         item.name.toLowerCase().includes(searchTerm) || 
-        item.category.toLowerCase().includes(searchTerm) ||
+        (item.tracking_id && item.tracking_id.toLowerCase().includes(searchTerm)) ||
+        (item.location && item.location.toLowerCase().includes(searchTerm)) ||
         (item.borrower_name && item.borrower_name.toLowerCase().includes(searchTerm))
     );
     
@@ -135,78 +141,130 @@ function applyFilters() {
 }
 
 function renderInventory(items) {
-    const tableHeader = document.querySelector('thead tr');
-    if (tableHeader) {
-        tableHeader.innerHTML = `
-            <th>Asset Name</th>
-            <th class="hide-mobile">Category</th>
-            <th>Status</th>
-            <th class="hide-mobile">Last Action</th>
-            <th>Actions</th>
-        `;
-    }
-
     const body = document.getElementById('inventory-body');
     if(!body) return;
     body.innerHTML = '';
 
-    items.forEach(asset => {
-        const tr = document.createElement('tr');
-        tr.className = 'animate-in';
-        
-        const isExpanded = openKitIds.has(asset.id);
-        const hasComponents = asset.components && asset.components.length > 0;
+    // Group items by name
+    const grouped = items.reduce((acc, item) => {
+        if (!acc[item.name]) acc[item.name] = [];
+        acc[item.name].push(item);
+        return acc;
+    }, {});
 
-        tr.innerHTML = `
-            <td>
-                <div style="font-weight:600">${asset.name}</div>
-                ${hasComponents ? `
-                    <button class="toggle-components-btn" onclick="toggleComponents(${asset.id})">
-                        <i data-lucide="${isExpanded ? 'chevron-up' : 'chevron-down'}" style="width:14px;"></i>
-                        ${isExpanded ? 'Hide' : 'Show'} ${asset.components.length} components
-                    </button>
-                    ${isExpanded ? `
-                        <div class="inline-components-list">
-                            ${asset.components.map(c => `
-                                <div class="inline-component-item">
-                                    <span>${c.name}</span>
-                                    <span>x${c.qty}</span>
-                                </div>
-                            `).join('')}
-                        </div>
-                    ` : ''}
-                ` : ''}
-            </td>
-            <td class="hide-mobile">${asset.category}</td>
-            <td>
-                <span class="status-badge status-${asset.status}">
-                    ${asset.status.replace('-', ' ').charAt(0).toUpperCase() + asset.status.replace('-', ' ').slice(1)}
-                </span>
-            </td>
-            <td class="hide-mobile">
-                <div style="font-size:0.8rem">${asset.last_action || 'No record'}</div>
-                ${asset.borrower_name ? `<small style="color:var(--accent)">By ${asset.borrower_name}</small>` : ''}
-            </td>
-            <td>
-                <div style="display:flex; gap:0.5rem; flex-wrap: wrap;">
-                    <button class="btn btn-outline btn-sm" onclick="handleAction(${asset.id})">
-                        ${asset.status === 'available' ? 'Sign Out' : asset.status === 'signed-out' ? 'Sign In' : 'Details'}
-                    </button>
-                    <button class="btn btn-outline btn-sm" onclick="openAssetModal(${asset.id})" title="Edit Item">
-                        <i data-lucide="edit-3" style="width:14px;"></i>
-                    </button>
-                    ${asset.status === 'available' ? `<button class="btn btn-outline btn-sm" onclick="flagDamaged(${asset.id})" title="Report Damaged"><i data-lucide="alert-triangle" style="width:14px;"></i></button>` : ''}
-                    <button class="btn btn-outline btn-sm" onclick="deleteAsset(${asset.id})" title="Delete Asset" style="color:var(--danger); border-color:rgba(239, 68, 68, 0.2)">
-                        <i data-lucide="trash-2" style="width:14px;"></i>
-                    </button>
+    Object.keys(grouped).sort().forEach(name => {
+        const groupItems = grouped[name];
+        const isExpanded = expandedGroups.has(name);
+        
+        // Group Header Row
+        const groupTr = document.createElement('tr');
+        groupTr.className = `group-row ${isExpanded ? 'expanded' : ''}`;
+        groupTr.onclick = () => toggleGroup(name);
+        
+        const availableCount = groupItems.filter(i => i.status === 'available').length;
+        const totalCount = groupItems.length;
+        
+        groupTr.innerHTML = `
+            <td colspan="3">
+                <div class="group-name-cell">
+                    <i data-lucide="chevron-down" class="chevron-icon" style="width:16px;"></i>
+                    <span>${name}</span>
+                    <span class="asset-count-badge">${totalCount} item${totalCount > 1 ? 's' : ''}</span>
                 </div>
             </td>
+            <td>
+                <span class="status-badge" style="background:rgba(255,255,255,0.05); color:var(--text-muted)">
+                    ${availableCount} / ${totalCount} Available
+                </span>
+            </td>
+            <td class="hide-mobile"></td>
+            <td>
+                <button class="btn btn-outline btn-sm" onclick="event.stopPropagation(); handleGroupAction('${name}')">
+                    ${availableCount > 0 ? 'Sign Out' : 'Details'}
+                </button>
+            </td>
         `;
-        body.appendChild(tr);
+        body.appendChild(groupTr);
+
+        // Individual Item Rows (if expanded)
+        if (isExpanded) {
+            groupItems.forEach(asset => {
+                const itemTr = document.createElement('tr');
+                itemTr.className = 'item-row animate-in';
+                itemTr.innerHTML = `
+                    <td class="indent-cell">
+                        <div style="font-size:0.75rem; color:var(--text-muted)">ID: ${asset.tracking_id || 'N/A'}</div>
+                    </td>
+                    <td>${asset.tracking_id || '--'}</td>
+                    <td>
+                        <div class="location-tag">
+                            <i data-lucide="map-pin" style="width:12px;"></i>
+                            ${asset.location || 'Unknown'}
+                        </div>
+                    </td>
+                    <td>
+                        <span class="status-badge status-${asset.status}">
+                            ${asset.status.replace('-', ' ')}
+                        </span>
+                    </td>
+                    <td class="hide-mobile">
+                        <div style="font-size:0.8rem">${asset.last_action || 'No record'}</div>
+                        ${asset.borrower_name ? `<small style="color:var(--accent)">By ${asset.borrower_name}</small>` : ''}
+                    </td>
+                    <td>
+                        <div style="display:flex; gap:0.5rem; flex-wrap: wrap;">
+                            <button class="btn btn-outline btn-sm" onclick="handleAction(${asset.id})">
+                                ${asset.status === 'available' ? 'Sign Out' : asset.status === 'signed-out' ? 'Sign In' : 'Details'}
+                            </button>
+                            <button class="btn btn-outline btn-sm" onclick="openAssetModal(${asset.id})" title="Edit Item">
+                                <i data-lucide="edit-3" style="width:14px;"></i>
+                            </button>
+                            <button class="btn btn-outline btn-sm" onclick="deleteAsset(${asset.id})" title="Delete Asset" style="color:var(--danger); border-color:rgba(239, 68, 68, 0.2)">
+                                <i data-lucide="trash-2" style="width:14px;"></i>
+                            </button>
+                        </div>
+                    </td>
+                `;
+
+                // Add component toggle if it has components
+                const hasComponents = asset.components && asset.components.length > 0;
+                if (hasComponents) {
+                    const isKitExpanded = openKitIds.has(asset.id);
+                    const componentTd = itemTr.querySelector('.indent-cell');
+                    componentTd.innerHTML += `
+                        <button class="toggle-components-btn" onclick="event.stopPropagation(); toggleComponents(${asset.id})">
+                            <i data-lucide="${isKitExpanded ? 'chevron-up' : 'chevron-down'}" style="width:12px;"></i>
+                            ${isKitExpanded ? 'Hide' : 'Show'} components
+                        </button>
+                        ${isKitExpanded ? `
+                            <div class="inline-components-list" style="margin-left: 0;">
+                                ${asset.components.map(c => `
+                                    <div class="inline-component-item">
+                                        <span>${c.name}</span>
+                                        <span>x${c.qty}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        ` : ''}
+                    `;
+                }
+
+                body.appendChild(itemTr);
+            });
+        }
     });
-    
+
     if (window.lucide) lucide.createIcons();
 }
+
+window.toggleGroup = (name) => {
+    if (expandedGroups.has(name)) {
+        expandedGroups.delete(name);
+    } else {
+        expandedGroups.add(name);
+    }
+    renderInventory(filteredAssets);
+};
 
 window.toggleComponents = (id) => {
     if (openKitIds.has(id)) {
@@ -240,8 +298,6 @@ window.openAssetModal = (editId = null) => {
     const asset = editId ? assets.find(a => a.id === editId) : null;
     const isEdit = !!asset;
 
-    let categoryOptions = categories.map(c => `<option value="${c}" ${asset?.category === c ? 'selected' : ''}>${c}</option>`).join('');
-    
     openModal(`
         <div class="modal-header">
             <h2>${isEdit ? 'Edit Asset' : 'Add New Asset'}</h2>
@@ -249,18 +305,20 @@ window.openAssetModal = (editId = null) => {
         </div>
         <div class="form-group">
             <label>Asset Name</label>
-            <input type="text" id="asset-name" class="form-control" value="${asset?.name || ''}" placeholder="e.g. LEGO Spike Prime #5">
-        </div>
-        <div class="form-group">
-            <label>Category</label>
-            <div style="display:flex; gap:0.5rem;">
-                <select id="asset-category-select" class="form-control" style="flex:1;">
-                    <option value="">-- Select Category --</option>
-                    ${categoryOptions}
-                    <option value="__NEW__">+ Add New Category</option>
-                </select>
+            <div style="display:flex; flex-direction:column; gap:0.25rem;">
+                <input type="text" id="asset-name" class="form-control" value="${asset?.name || ''}" placeholder="e.g. LEGO Spike Prime">
+                <small style="color:var(--text-muted)">Items with the same name will be grouped together.</small>
             </div>
-            <input type="text" id="asset-category-new" class="form-control" placeholder="Enter new category name" style="display:none; margin-top:0.5rem;">
+        </div>
+        <div class="form-group" style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem;">
+            <div>
+                <label>Tracking ID</label>
+                <input type="text" id="asset-tracking-id" class="form-control" value="${asset?.tracking_id || ''}" placeholder="e.g. #001">
+            </div>
+            <div>
+                <label>Current Location</label>
+                <input type="text" id="asset-location" class="form-control" value="${asset?.location || ''}" placeholder="e.g. Robotics Lab">
+            </div>
         </div>
         
         <div class="form-group" style="margin-top:2rem;">
@@ -282,18 +340,7 @@ window.openAssetModal = (editId = null) => {
     // Handle initial components if editing
     if (isEdit && asset.components) {
         asset.components.forEach(c => addComponentRow(c.name, c.qty));
-    } else if (!isEdit) {
-        // add one empty row as a hint
-        // addComponentRow(); 
     }
-
-    // Dynamic Category Handler
-    const select = document.getElementById('asset-category-select');
-    const nextInput = document.getElementById('asset-category-new');
-    select.addEventListener('change', (e) => {
-        nextInput.style.display = e.target.value === '__NEW__' ? 'block' : 'none';
-        if (e.target.value === '__NEW__') nextInput.focus();
-    });
 }
 
 window.addComponentRow = (name = '', qty = 1) => {
@@ -313,13 +360,11 @@ window.addComponentRow = (name = '', qty = 1) => {
 
 window.confirmSaveAsset = async (editId = null) => {
     const name = document.getElementById('asset-name').value;
-    const catSelect = document.getElementById('asset-category-select').value;
-    const catNew = document.getElementById('asset-category-new').value;
-    
-    let category = catSelect === '__NEW__' ? catNew : catSelect;
+    const tracking_id = document.getElementById('asset-tracking-id').value;
+    const location = document.getElementById('asset-location').value;
 
-    if (!name || !category) {
-        alert("Please provide both a Name and a Category.");
+    if (!name || !tracking_id) {
+        alert("Please provide both a Name and a Tracking ID.");
         return;
     }
 
@@ -336,7 +381,8 @@ window.confirmSaveAsset = async (editId = null) => {
 
     const payload = {
         name,
-        category,
+        tracking_id,
+        location,
         components: components.length > 0 ? components : null,
     };
 
@@ -358,15 +404,56 @@ window.confirmSaveAsset = async (editId = null) => {
     await loadData();
 };
 
+window.handleGroupAction = (name) => {
+    const groupItems = assets.filter(a => a.name === name);
+    const availableItems = groupItems.filter(a => a.status === 'available');
+
+    if (availableItems.length === 0) {
+        // Just show the list (expand it)
+        expandedGroups.add(name);
+        renderInventory(filteredAssets);
+        return;
+    }
+
+    if (availableItems.length === 1) {
+        // Only one available, proceed to sign out
+        handleAction(availableItems[0].id);
+        return;
+    }
+
+    // Multiple available, show picker
+    const pickerHtml = availableItems.map(item => `
+        <div class="stat-card" style="padding:1rem; cursor:pointer;" onclick="closeModal(); handleAction(${item.id})">
+            <div style="font-weight:600">${item.tracking_id || 'No ID'}</div>
+            <div style="font-size:0.8rem; color:var(--text-muted)">Location: ${item.location || 'Unknown'}</div>
+        </div>
+    `).join('');
+
+    openModal(`
+        <div class="modal-header">
+            <h2>Select Asset to Sign Out</h2>
+            <p style="color:var(--text-muted)">Multiple items for <strong>${name}</strong> are available. Select which one you are taking.</p>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-top:1rem;">
+            ${pickerHtml}
+        </div>
+        <div style="display:flex; justify-content:flex-end; margin-top:2rem;">
+            <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+        </div>
+    `);
+};
+
 window.handleAction = (id) => {
     const asset = assets.find(a => a.id === id);
     if (!asset) return;
+
+    const displayId = asset.tracking_id ? ` [${asset.tracking_id}]` : '';
 
     if (asset.status === 'signed-out') {
         openModal(`
             <div class="modal-header">
                 <h2>Return Asset</h2>
-                <p style="color:var(--text-muted)">Returning <strong>${asset.name}</strong></p>
+                <p style="color:var(--text-muted)">Returning <strong>${asset.name}${displayId}</strong></p>
             </div>
             <div class="form-group">
                 <label>Inventory Condition Update</label>
@@ -384,14 +471,14 @@ window.handleAction = (id) => {
         openModal(`
             <div class="modal-header">
                 <h2>Sign Out Asset</h2>
-                <p style="color:var(--text-muted)">Checking out <strong>${asset.name}</strong></p>
+                <p style="color:var(--text-muted)">Checking out <strong>${asset.name}${displayId}</strong></p>
             </div>
             <div class="form-group">
                 <label>Your Name</label>
                 <input type="text" id="signer-name" class="form-control" placeholder="Who is taking it?">
             </div>
             <div class="form-group">
-                <label>Reason / Location</label>
+                <label>Reason / Destination</label>
                 <input type="text" id="signer-reason" class="form-control" placeholder="e.g. Outreach at London School">
             </div>
             <div style="display:flex; gap:1rem; justify-content:flex-end; margin-top:2rem;">
@@ -403,11 +490,12 @@ window.handleAction = (id) => {
         openModal(`
             <div class="modal-header">
                 <h2>Damaged Asset Details</h2>
-                <p style="color:var(--text-muted)"><strong>${asset.name}</strong> is currently marked as damaged.</p>
+                <p style="color:var(--text-muted)"><strong>${asset.name}${displayId}</strong> is currently marked as damaged.</p>
             </div>
             <div class="form-group">
                 <p>Status: <span class="status-badge status-damaged">Damaged</span></p>
-                <p style="margin-top:0.5rem; font-size:0.9rem;">Last Action: ${asset.last_action}</p>
+                <p style="margin-top:0.5rem; font-size:0.9rem;">Location: ${asset.location || 'N/A'}</p>
+                <p style="margin-top:0.25rem; font-size:0.9rem;">Last Action: ${asset.last_action}</p>
             </div>
             <div style="display:flex; gap:1rem; justify-content:flex-end; margin-top:2rem;">
                 <button class="btn btn-outline" onclick="closeModal()">Close</button>
