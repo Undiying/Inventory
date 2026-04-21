@@ -559,3 +559,43 @@ input[type="checkbox"]#bulk-mode-toggle:checked::before {
   animation: fadeIn 0.5s ease forwards;
 }
 
+/* Scanner styles */
+#reader {
+    width: 100%;
+    margin: 1rem 0;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--glass-border);
+}
+
+#reader video {
+    border-radius: 12px;
+    object-fit: cover;
+}
+
+#reader__dashboard_section_csr button {
+    background: var(--primary) !important;
+    color: white !important;
+    border: none !important;
+    padding: 0.5rem 1rem !important;
+    border-radius: 8px !important;
+    margin: 0.25rem !important;
+    font-family: inherit !important;
+    cursor: pointer;
+}
+
+#reader a {
+    color: var(--accent) !important;
+}
+
+.scanner-input {
+    position: absolute;
+    opacity: 0;
+    z-index: -1;
+}
+
+@media (max-width: 768px) {
+    .hide-mobile {
+        display: none !important;
+    }
+}

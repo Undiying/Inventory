@@ -14,6 +14,8 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <!-- Supabase JS Client -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- HTML5 QRCode -->
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 </head>
 <body>
     <!-- Mobile Header -->
@@ -72,10 +74,14 @@
                     <h1 id="page-title">Inventory Dashboard</h1>
                     <p id="page-description">Overview of Sheen Academy assets and availability.</p>
                 </div>
-                <div class="header-actions">
+                <div class="header-actions" style="display: flex; gap: 1rem;">
+                    <button class="btn btn-outline" id="scan-barcode-btn" style="border-color: var(--primary); color: var(--primary);">
+                        <i data-lucide="scan"></i>
+                        <span class="hide-mobile">Scan Barcode</span>
+                    </button>
                     <button class="btn btn-primary" id="add-asset-btn">
                         <i data-lucide="plus-circle"></i>
-                        Add New Asset
+                        <span class="hide-mobile">Add New Asset</span>
                     </button>
                 </div>
             </header>

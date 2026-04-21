@@ -48,6 +48,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         openAssetModal(); // Unified modal for Add/Edit
     });
 
+    // Scan Barcode Button
+    const scanBtn = document.getElementById('scan-barcode-btn');
+    if (scanBtn) {
+        scanBtn.addEventListener('click', () => {
+            openScanModal();
+        });
+    }
+
     // Mobile Navigation
     const sidebar = document.getElementById('app-sidebar');
     document.getElementById('mobile-nav-toggle').addEventListener('click', () => {
@@ -287,6 +295,12 @@ function openModal(html) {
 }
 
 window.closeModal = () => {
+    if (window.html5QrcodeScanner) {
+        try {
+            window.html5QrcodeScanner.clear();
+        } catch(e) {}
+        window.html5QrcodeScanner = null;
+    }
     document.getElementById('modal-container').style.display = 'none';
 };
 
@@ -713,6 +727,110 @@ window.flagDamaged = async (id) => {
         }]);
 
         await loadData();
+    }
+};
+
+window.processBarcode = (barcode) => {
+    // Find asset by tracking_id exactly (case-insensitive for safety)
+    const asset = assets.find(a => a.tracking_id && a.tracking_id.toLowerCase() === barcode.toLowerCase());
+    
+    if (asset) {
+        // Close modal automatically handles camera cleanup
+        closeModal();
+        // Route to the appropriate action modal
+        handleAction(asset.id);
+    } else {
+        alert(`Asset with barcode "${barcode}" not found in inventory.`);
+        // Re-focus the physical scanner input
+        const input = document.getElementById('physical-scanner-input');
+        if (input) {
+            input.value = '';
+            input.focus();
+        }
+    }
+};
+
+window.openScanModal = () => {
+    openModal(`
+        <div class="modal-header">
+            <h2>Scan Barcode</h2>
+            <p style="color:var(--text-muted)">Scan an item to quickly sign it in or out.</p>
+        </div>
+        
+        <div style="text-align: center; margin-bottom: 1rem; position: relative;">
+            <p style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 0.5rem;">
+                Ready for physical scanner input
+            </p>
+            <input type="text" id="physical-scanner-input" class="scanner-input" autocomplete="off" style="left:0; top:0;">
+            <div style="padding: 1rem; border: 2px dashed rgba(99, 102, 241, 0.4); border-radius: 12px; display: inline-block; cursor: pointer;" onclick="document.getElementById('physical-scanner-input').focus()">
+                <i data-lucide="barcode" style="width: 48px; height: 48px; color: var(--primary);"></i>
+                <p style="margin-top: 0.5rem; font-weight: 600;">Awaiting scan...</p>
+            </div>
+        </div>
+
+        <div style="text-align: center; margin: 1rem 0;">
+            <span style="color: var(--text-muted); font-size: 0.8rem;">OR</span>
+        </div>
+
+        <div class="form-group" style="text-align: center;">
+            <button class="btn btn-outline" id="start-camera-btn" style="margin: 0 auto;" onclick="startCameraScanner()">
+                <i data-lucide="camera"></i>
+                Use Device Camera
+            </button>
+            <div id="reader" style="display: none; text-align: left;"></div>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; margin-top:2rem;">
+            <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
+        </div>
+    `);
+
+    // Setup physical scanner listener
+    setTimeout(() => {
+        const input = document.getElementById('physical-scanner-input');
+        if (input) {
+            input.focus();
+            
+            // Keep focus if they interact elsewhere but not heavily
+            document.querySelector('.modal-content').addEventListener('click', (e) => {
+                if(e.target.tagName !== 'BUTTON' && !e.target.closest('#reader')) {
+                    input.focus();
+                }
+            });
+
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const barcode = input.value.trim();
+                    if (barcode) {
+                        processBarcode(barcode);
+                    }
+                }
+            });
+        }
+    }, 100);
+};
+
+window.startCameraScanner = () => {
+    document.getElementById('start-camera-btn').style.display = 'none';
+    document.getElementById('reader').style.display = 'block';
+
+    if (typeof Html5QrcodeScanner !== "undefined") {
+        window.html5QrcodeScanner = new Html5QrcodeScanner(
+            "reader",
+            { fps: 10, qrbox: {width: 250, height: 100} },
+            /* verbose= */ false
+        );
+        window.html5QrcodeScanner.render(
+            (decodedText) => {
+                processBarcode(decodedText);
+            },
+            (error) => {
+                // Ignore ongoing scanning errors
+            }
+        );
+    } else {
+        alert("Camera scanner library not loaded. Please ensure you are connected to the internet.");
     }
 };
 
