@@ -38,6 +38,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         renderHistory();
     });
 
+    document.getElementById('nav-labels').addEventListener('click', (e) => {
+        e.preventDefault();
+        setActiveLink('nav-labels');
+        document.getElementById('page-title').textContent = "Print Barcode Labels";
+        renderLabelsView();
+    });
+
     // Search input handler
     document.getElementById('inventory-search').addEventListener('input', () => {
         applyFilters();
@@ -219,6 +226,9 @@ function renderInventory(items) {
                         <div style="display:flex; gap:0.5rem; flex-wrap: wrap;">
                             <button class="btn btn-outline btn-sm" onclick="handleAction(${asset.id})">
                                 ${asset.status === 'available' ? 'Sign Out' : asset.status === 'signed-out' ? 'Sign In' : 'Details'}
+                            </button>
+                            <button class="btn btn-outline btn-sm" onclick="showLabel(${asset.id})" title="Print Label">
+                                <i data-lucide="printer" style="width:14px;"></i>
                             </button>
                             <button class="btn btn-outline btn-sm" onclick="openAssetModal(${asset.id})" title="Edit Item">
                                 <i data-lucide="edit-3" style="width:14px;"></i>
@@ -832,6 +842,174 @@ window.startCameraScanner = () => {
     } else {
         alert("Camera scanner library not loaded. Please ensure you are connected to the internet.");
     }
+};
+
+window.showLabel = (id) => {
+    const asset = assets.find(a => a.id === id);
+    if (!asset || !asset.tracking_id) {
+        alert("This asset does not have a Tracking ID.");
+        return;
+    }
+
+    openModal(`
+        <div class="modal-header">
+            <h2>Asset Label</h2>
+            <p style="color:var(--text-muted)">Print a label for <strong>${asset.name}</strong></p>
+        </div>
+        <div class="printable-label-container" id="printable-label">
+            <div class="label-box">
+                <div class="label-name">${asset.name}</div>
+                <svg class="barcode-svg" id="barcode-${asset.id}"></svg>
+                <div class="label-id">${asset.tracking_id}</div>
+            </div>
+        </div>
+        <div style="display:flex; gap:1rem; justify-content:flex-end; margin-top:2rem;">
+            <button class="btn btn-outline" onclick="closeModal()">Close</button>
+            <button class="btn btn-primary" onclick="printElement('printable-label')">
+                <i data-lucide="printer"></i>
+                Print Label
+            </button>
+        </div>
+    `);
+
+    setTimeout(() => {
+        JsBarcode(`#barcode-${asset.id}`, asset.tracking_id, {
+            format: "CODE128",
+            width: 2,
+            height: 60,
+            displayValue: false
+        });
+        if (window.lucide) lucide.createIcons();
+    }, 100);
+};
+
+window.printElement = (elementId) => {
+    const printContent = document.getElementById(elementId).innerHTML;
+    const originalContent = document.body.innerHTML;
+    
+    // Create print layout
+    document.body.innerHTML = `
+        <div class="print-page">
+            ${printContent}
+        </div>
+    `;
+    
+    window.print();
+    
+    // Restore
+    document.body.innerHTML = originalContent;
+    window.location.reload(); // Hard reload to re-init everything safely
+};
+
+window.renderLabelsView = () => {
+    const pageDescription = document.getElementById('page-description');
+    pageDescription.textContent = "Generate bulk barcodes for all items in your inventory.";
+    
+    const body = document.getElementById('inventory-body');
+    if(!body) return;
+    body.innerHTML = '';
+
+    const container = document.createElement('div');
+    container.className = 'labels-view-header animate-in';
+    container.innerHTML = `
+        <div style="margin-bottom: 2rem; background: var(--glass); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--glass-border);">
+            <h3>Bulk Print Labels</h3>
+            <p style="color: var(--text-muted); margin-bottom: 1rem;">Select items to generate a sheet of labels. Use standard sticker paper for printing.</p>
+            <div style="display: flex; gap: 1rem;">
+                <button class="btn btn-primary" onclick="printAllSelected()">
+                    <i data-lucide="printer"></i>
+                    Print Selected Labels
+                </button>
+                <button class="btn btn-outline" onclick="toggleAllLabels(true)">Select All</button>
+                <button class="btn btn-outline" onclick="toggleAllLabels(false)">Deselect All</button>
+            </div>
+        </div>
+        <div class="labels-grid" id="labels-selection-grid">
+            ${assets.map(a => `
+                <div class="label-check-item ${a.tracking_id ? '' : 'disabled'}" onclick="${a.tracking_id ? `toggleLabelSelect(${a.id})` : ''}">
+                    <input type="checkbox" class="label-selector" data-id="${a.id}" ${a.tracking_id ? 'checked' : 'disabled'}>
+                    <div class="label-check-info">
+                        <strong>${a.name}</strong>
+                        <span>ID: ${a.tracking_id || 'Missing'}</span>
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+    
+    body.appendChild(container);
+    if (window.lucide) lucide.createIcons();
+};
+
+window.toggleLabelSelect = (id) => {
+    const checkbox = document.querySelector(`.label-selector[data-id="${id}"]`);
+    if (checkbox) checkbox.checked = !checkbox.checked;
+};
+
+window.toggleAllLabels = (checked) => {
+    document.querySelectorAll('.label-selector:not(:disabled)').forEach(cb => cb.checked = checked);
+};
+
+window.printAllSelected = () => {
+    const selectedIds = Array.from(document.querySelectorAll('.label-selector:checked')).map(cb => parseInt(cb.getAttribute('data-id')));
+    const itemsToPrint = assets.filter(a => selectedIds.includes(a.id));
+
+    if (itemsToPrint.length === 0) {
+        alert("Please select at least one item to print.");
+        return;
+    }
+
+    const printWindow = window.open('', '_blank');
+    const labelHtml = itemsToPrint.map(a => `
+        <div class="label-box print-mode">
+            <div class="label-name">${a.name}</div>
+            <svg id="barcode-print-${a.id}"></svg>
+            <div class="label-id">${a.tracking_id}</div>
+        </div>
+    `).join('');
+
+    printWindow.document.write(`
+        <html>
+            <head>
+                <title>Print Labels - Sheen Academy</title>
+                <style>
+                    body { font-family: 'Inter', sans-serif; padding: 20px; }
+                    .labels-container { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
+                    .label-box { 
+                        border: 1px solid #eee; 
+                        padding: 15px; 
+                        text-align: center; 
+                        page-break-inside: avoid;
+                        border-radius: 8px;
+                    }
+                    .label-name { font-size: 10px; font-weight: bold; margin-bottom: 5px; text-transform: uppercase; }
+                    .label-id { font-size: 10px; margin-top: 5px; font-family: monospace; }
+                    @media print {
+                        body { padding: 0; }
+                        .label-box { border: 1px solid #ddd; }
+                    }
+                </style>
+                <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.12.3/dist/JsBarcode.all.min.js"></script>
+            </head>
+            <body>
+                <div class="labels-container">
+                    ${labelHtml}
+                </div>
+                <script>
+                    ${itemsToPrint.map(a => `
+                        JsBarcode("#barcode-print-${a.id}", "${a.tracking_id}", {
+                            format: "CODE128",
+                            width: 1.5,
+                            height: 40,
+                            displayValue: false
+                        });
+                    `).join('\n')}
+                    setTimeout(() => { window.print(); }, 500);
+                </script>
+            </body>
+        </html>
+    `);
+    printWindow.document.close();
 };
 
 function showDashboard() {

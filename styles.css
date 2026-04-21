@@ -599,3 +599,113 @@ input[type="checkbox"]#bulk-mode-toggle:checked::before {
         display: none !important;
     }
 }
+
+/* Label Printing Styles */
+.printable-label-container {
+    background: white;
+    padding: 2rem;
+    border-radius: 12px;
+    display: flex;
+    justify-content: center;
+    margin: 1rem 0;
+}
+
+.label-box {
+    width: 250px;
+    padding: 1rem;
+    background: white;
+    color: black;
+    border: 1px solid #eee;
+    text-align: center;
+    border-radius: 8px;
+}
+
+.label-name {
+    font-weight: 800;
+    font-size: 0.8rem;
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+    color: #333;
+}
+
+.label-id {
+    font-family: monospace;
+    font-size: 0.9rem;
+    margin-top: 0.5rem;
+    color: #666;
+}
+
+.barcode-svg {
+    max-width: 100%;
+}
+
+/* Labels View Selection Grid */
+.labels-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.label-check-item {
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    padding: 1rem;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.label-check-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: var(--primary);
+}
+
+.label-check-item.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.label-check-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.label-check-info strong {
+    font-size: 0.9rem;
+}
+
+.label-check-info span {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.label-selector {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--primary);
+}
+
+@media print {
+    .sidebar, .mobile-header, .header-actions, .welcome-section, .btn, .modal-header, .modal-close {
+        display: none !important;
+    }
+    
+    body {
+        background: white !important;
+    }
+
+    .print-page {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+    }
+
+    .label-box {
+        border: none;
+    }
+}
