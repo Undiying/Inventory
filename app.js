@@ -915,7 +915,14 @@ window.renderLabelsView = () => {
         <div style="margin-bottom: 2rem; background: var(--glass); padding: 1.5rem; border-radius: 12px; border: 1px solid var(--glass-border);">
             <h3>Bulk Print Labels</h3>
             <p style="color: var(--text-muted); margin-bottom: 1rem;">Select items to generate a sheet of labels. Use standard sticker paper for printing.</p>
-            <div style="display: flex; gap: 1rem;">
+            <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+                <div class="form-group" style="margin-bottom: 0;">
+                    <select id="label-template-select" class="form-control" style="min-width: 250px;">
+                        <option value="45up">Takealot 45-Up (A4 Sheet)</option>
+                        <option value="24up">Standard 24-Up (A4 Sheet)</option>
+                        <option value="continuous">Single Continuous (Thermal Roll)</option>
+                    </select>
+                </div>
                 <button class="btn btn-primary" onclick="printAllSelected()">
                     <i data-lucide="printer"></i>
                     Print Selected Labels
@@ -959,6 +966,45 @@ window.printAllSelected = () => {
         return;
     }
 
+    const templateSelect = document.getElementById('label-template-select');
+    const template = templateSelect ? templateSelect.value : '45up';
+
+    let config = {
+        '45up': {
+            gridTemplateColumns: 'repeat(5, 39.2mm)',
+            gridAutoRows: '29.88mm',
+            gap: '0mm',
+            padding: '14mm 7mm',
+            barcodeWidth: 1.1,
+            barcodeHeight: 22,
+            fontSize: '8px',
+            pageBreak: 'avoid',
+            labelPadding: '2mm'
+        },
+        '24up': {
+            gridTemplateColumns: 'repeat(3, 63.5mm)',
+            gridAutoRows: '33.9mm',
+            gap: '0mm 2.5mm',
+            padding: '13.3mm 7.2mm',
+            barcodeWidth: 1.5,
+            barcodeHeight: 32,
+            fontSize: '10px',
+            pageBreak: 'avoid',
+            labelPadding: '3mm'
+        },
+        'continuous': {
+            gridTemplateColumns: '1fr',
+            gridAutoRows: 'auto',
+            gap: '0',
+            padding: '0',
+            barcodeWidth: 2,
+            barcodeHeight: 50,
+            fontSize: '12px',
+            pageBreak: 'always',
+            labelPadding: '5mm'
+        }
+    }[template];
+
     const printWindow = window.open('', '_blank');
     const labelHtml = itemsToPrint.map(a => `
         <div class="label-box print-mode">
@@ -973,20 +1019,58 @@ window.printAllSelected = () => {
             <head>
                 <title>Print Labels - Sheen Academy</title>
                 <style>
-                    body { font-family: 'Inter', sans-serif; padding: 20px; }
-                    .labels-container { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
+                    @page {
+                        margin: 0;
+                        size: auto;
+                    }
+                    body { 
+                        font-family: 'Inter', sans-serif; 
+                        margin: 0;
+                        padding: 0;
+                        background: white;
+                    }
+                    .labels-container { 
+                        display: grid; 
+                        grid-template-columns: ${config.gridTemplateColumns}; 
+                        grid-auto-rows: ${config.gridAutoRows};
+                        gap: ${config.gap};
+                        padding: ${config.padding};
+                        box-sizing: border-box;
+                    }
                     .label-box { 
-                        border: 1px solid #eee; 
-                        padding: 15px; 
+                        display: flex;
+                        flex-direction: column;
+                        align-items: center;
+                        justify-content: center;
+                        box-sizing: border-box;
+                        padding: ${config.labelPadding};
                         text-align: center; 
                         page-break-inside: avoid;
-                        border-radius: 8px;
+                        page-break-after: ${template === 'continuous' ? 'always' : 'auto'};
+                        overflow: hidden;
                     }
-                    .label-name { font-size: 10px; font-weight: bold; margin-bottom: 5px; text-transform: uppercase; }
-                    .label-id { font-size: 10px; margin-top: 5px; font-family: monospace; }
-                    @media print {
-                        body { padding: 0; }
-                        .label-box { border: 1px solid #ddd; }
+                    .label-name { 
+                        font-size: ${config.fontSize}; 
+                        font-weight: bold; 
+                        margin-bottom: 2px; 
+                        text-transform: uppercase;
+                        white-space: nowrap;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                        max-width: 100%;
+                    }
+                    .label-id { 
+                        font-size: ${config.fontSize}; 
+                        margin-top: 2px; 
+                        font-family: monospace; 
+                    }
+                    svg {
+                        max-width: 100%;
+                        height: auto;
+                    }
+                    @media screen {
+                        body { background: #f0f0f0; padding: 20px; }
+                        .labels-container { background: white; margin: 0 auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 210mm; }
                     }
                 </style>
                 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.12.3/dist/JsBarcode.all.min.js"></script>
@@ -999,9 +1083,10 @@ window.printAllSelected = () => {
                     ${itemsToPrint.map(a => `
                         JsBarcode("#barcode-print-${a.id}", "${a.tracking_id}", {
                             format: "CODE128",
-                            width: 1.5,
-                            height: 40,
-                            displayValue: false
+                            width: ${config.barcodeWidth},
+                            height: ${config.barcodeHeight},
+                            displayValue: false,
+                            margin: 0
                         });
                     `).join('\n')}
                     setTimeout(() => { window.print(); }, 500);
