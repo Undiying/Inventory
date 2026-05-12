@@ -28,6 +28,10 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+body.modal-open {
+  overflow: hidden;
+}
+
 .app-container {
   display: flex;
   min-height: 100vh;
@@ -242,9 +246,11 @@ tr:last-child td {
     background: rgba(0, 0, 0, 0.4);
     backdrop-filter: blur(8px);
     display: flex;
-    align-items: center;
+    align-items: flex-start; /* Start from top to allow scrolling */
     justify-content: center;
     z-index: 1000;
+    overflow-y: auto; /* Enable vertical scrolling */
+    padding: 2rem 1rem;
 }
 
 .modal-content {
@@ -256,6 +262,7 @@ tr:last-child td {
     padding: 2.5rem;
     position: relative;
     box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    margin: auto; /* Center when content is small, allow scroll when large */
 }
 
 .modal-header {

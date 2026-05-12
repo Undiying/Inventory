@@ -301,6 +301,7 @@ function openModal(html) {
         </div>
     `;
     container.style.display = 'block';
+    document.body.classList.add('modal-open');
     if (window.lucide) lucide.createIcons();
 }
 
@@ -312,6 +313,7 @@ window.closeModal = () => {
         window.html5QrcodeScanner = null;
     }
     document.getElementById('modal-container').style.display = 'none';
+    document.body.classList.remove('modal-open');
 };
 
 window.openAssetModal = (editId = null) => {
